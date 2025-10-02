@@ -15,6 +15,7 @@ This guide walks you through setting up a hidden service to serve your files, bl
 ---
 
 ## Step 1: Prepare the Pi
+
 ```bash
 sudo apt update && sudo apt upgrade -y
 shutdown -r now    # restart

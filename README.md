@@ -1,5 +1,185 @@
 ## darkWEB_server
 
-follow instructions in setup guide xo
+
 
 ![onionnn](https://github.com/user-attachments/assets/dc37a55f-5cdc-49d7-8080-2f929c7d5c53)
+
+# Rasp Pi Dark Web Server
+
+Host your own **censorship-resistant onion site** using a Raspberry Pi, Tor, and NGINX.  
+This guide walks you through setting up a hidden service to serve your files, blog, or community — with no domain registrar, no SSL, and no corporate gatekeeper.
+
+---
+
+## What You Need
+- Raspberry Pi 5 (I used a Pi 4B — it works, but took extra troubleshooting)  
+- A clean install of **Kali Linux** (or Raspberry Pi OS)  
+- USB flash drive (to hold your site files)  
+- Stable internet connection  
+- Read-only mount for your USB so nothing can overwrite your files  
+
+---
+
+## Step 1: Prepare the Pi
+
+```bash
+sudo apt update && sudo apt upgrade -y
+shutdown -r now    # restart
+sudo apt install nginx tor -y
+````
+
+---
+
+## Step 2: Mount Your USB Drive (Read-Only)
+
+Read-only means your files can't be altered by accident or by an attacker who somehow reaches the Pi.
+
+Find the drive:
+
+```bash
+lsblk
+```
+
+Create a mountpoint:
+
+```bash
+sudo mkdir -p /mnt/usb
+```
+
+Mount read-only:
+
+```bash
+sudo mount -o ro,uid=www-data,gid=www-data /dev/sda1 /mnt/usb
+```
+
+Now drop your site files in `/mnt/usb`
+
+* `index.html` → homepage (disclaimer, intro, etc.)
+* `list/` → folder of downloadable files
+
+---
+
+## Step 3: Configure NGINX (Tor-Only)
+
+Edit the default site:
+
+```bash
+sudo nano /etc/nginx/sites-enabled/default
+```
+
+Paste in:
+
+```nginx
+server {
+    listen 127.0.0.1:80 default_server;
+    server_name localhost;
+
+    root /mnt/usb;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /list/ {
+        alias /mnt/usb/list/;
+        autoindex on;
+        autoindex_exact_size off;
+        autoindex_localtime on;
+    }
+
+    location ~ /\. {
+        deny all;
+    }
+}
+```
+
+Save & exit Nano (`ctrl+x`, then `y`, then `enter`).
+
+Enable NGINX:
+
+```bash
+sudo nginx -t
+sudo systemctl enable nginx --now
+```
+
+---
+
+## Step 4: Configure Tor Hidden Service
+
+Create hidden service directory:
+
+```bash
+sudo mkdir -p /var/lib/tor/your_service
+sudo chown -R debian-tor:debian-tor /var/lib/tor/your_service
+sudo chmod 700 /var/lib/tor/your_service
+```
+
+Edit Tor config:
+
+```bash
+sudo nano /etc/tor/torrc
+```
+
+Add at the bottom:
+
+```ini
+User debian-tor
+DataDirectory /var/lib/tor
+SocksPort 9050
+
+HiddenServiceDir /var/lib/tor/your_service/
+HiddenServiceVersion 3
+HiddenServicePort 80 127.0.0.1:80
+```
+
+*(If you already see `User debian-tor`, don’t duplicate it.)*
+
+Restart Tor:
+
+```bash
+sudo systemctl restart tor@default
+```
+
+Get your onion address:
+
+```bash
+sudo cat /var/lib/tor/your_service/hostname
+```
+
+It will look like:
+
+```
+vno7jb3h4cksmmwxat374yotss6kdzc43rcazu420y69zrjsqwnvoopp.onion/list/
+```
+
+---
+
+## Step 5: Lock It Down
+
+* **Bind to localhost** (already done). The Pi does not serve on the open internet.
+* **Mount USB read-only** (done above). Files can’t be altered.
+* **Keep your onion link private** unless you’re ready for traffic.
+* *(Optional)* Add `iptables` rules to further control traffic (covered in a future guide).
+
+---
+
+## Results
+
+You now have a working onion service serving files straight from a flash drive, on your own hardware.
+
+* No domain registrar
+* No SSL certs
+* No corporate gatekeeper
+
+Your mirror sits quietly behind Tor, accessible only to those who know the link.
+
+---
+
+## Final Thoughts
+
+This isn’t just for coders. 
+Web designers, journalists, activists, and photographers can all use onion services to share their work without a middleman.
+
+In an era of surveillance, corporate gatekeeping, and arbitrary takedowns, publishing directly from your own hardware is powerful.
+It’s not big or flashy — it’s **small, DIY, and entirely yours**.
